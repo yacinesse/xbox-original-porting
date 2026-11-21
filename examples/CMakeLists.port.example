@@ -1,0 +1,60 @@
+# CMakeLists.port.example
+#
+# Generic CMake build template for a standalone Original Xbox static recompilation
+# port linking against xboxrecomp + native Windows Direct3D 11 graphics backend.
+# Keep your port repo separate from the external `xboxrecomp` checkout.
+
+cmake_minimum_required(VERSION 3.20)
+project(xbox_game_port C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+
+# Point to your pinned external/xboxrecomp directory
+set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external/xboxrecomp"
+    CACHE PATH "Path to xboxrecomp toolkit root")
+
+# Build xboxrecomp static libraries (xbox_kernel, xbox_nv2a, xbox_apu, xbox_input, xbox_usb, ...)
+add_subdirectory("${XBOXRECOMP_DIR}" "${CMAKE_BINARY_DIR}/xboxrecomp_build")
+
+# Glob lifted C translation units (`--split 1000` recommended for fast parallel Ninja builds)
+file(GLOB RECOMP_GEN_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/recomp/gen/*.c"
+)
+
+add_executable(${PROJECT_NAME} WIN32
+    src/main.c
+    src/recomp_manual.c
+    src/nv2a_d3d11_backend.c
+    ${RECOMP_GEN_SOURCES}
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/recomp/gen"
+    "${XBOXRECOMP_DIR}/include"
+)
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W2 /O2 /GS- /bigobj)
+    target_link_options(${PROJECT_NAME} PRIVATE /LARGEADDRESSAWARE /STACK:8388608)
+else()
+    # MinGW-w64 / GCC / Clang: -O3 -fno-math-errno accelerates lifted math & VSH paths.
+    # Combine with Ninja (`-G Ninja`) for fast incremental parallel builds.
+    target_compile_options(${PROJECT_NAME} PRIVATE -O3 -fno-math-errno -Wno-unused-variable -Wno-unused-label)
+    target_link_options(${PROJECT_NAME} PRIVATE -Wl,--stack,8388608)
+endif()
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    xboxrecomp
+    d3d11
+    dxgi
+    dxguid
+    d3dcompiler
+    $<IF:$<BOOL:${MINGW}>,xinput1_4,xinput>
+    winmm
+    dbghelp
+    ws2_32
+)
