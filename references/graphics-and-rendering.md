@@ -20,9 +20,9 @@ Choose based on your `default.xbe` symbol/LTCG analysis (never guess):
 - **D3D11 Strategy *[VERIFIED]*:** Either pass `CombinerCB` constants to a dynamic HLSL stage-loop evaluator (supports all `0..8` stages + `dot`/mux/shift-bias ops + final `D + C*(1-A) + B*A` blend with zero shader-compile hitching!) OR hash the combiner state to compile per-permutation HLSL shaders.
 - **Extended Backend Structs:** Upstream `nv2a_backend.h` started with stage 0 + diffuse only; extend `Nv2aBatch` and `Nv2aVertex` to carry **`textures[4]`**, `specular`, `fog`, and `t[4][3]` (`u, v, q` / cubemap vector) for authentic multi-texturing.
 
-### Supersampled Anti-Aliased Surfaces (`2×` / `2×2`)
-- Games enable supersampled offscreen RTs (e.g., `640×960` pre-resolve RT resolving to `640×480` backbuffer, flagged in `SET_SURFACE_FORMAT` bits 12–15).
-- Scale transformed vertex shader positions by `s_gpu.aa_sx` / `s_gpu.aa_sy`, clamp near-zero `w` (`fabsf(pos[3]) < 1e-6f`), and separate **allocated surface capacity (`alloc_w`, `alloc_h`)** from logical viewport dimensions in your RT cache (`get_rt_surface`).
+### Supersampled Anti-Aliased Surfaces (`2×` / `2×2`) & Active RT Extent
+- Games enable supersampled offscreen RTs (e.g., `640×960` pre-resolve RT resolving to `640×480` backbuffer, flagged in `SET_SURFACE_FORMAT` bits 12–15) and may transiently touch a display surface with `clip_h = 960` before later full-origin frames draw `640×480`.
+- Scale transformed vertex shader positions by `s_gpu.aa_sx` / `s_gpu.aa_sy`, clamp near-zero `w` (`fabsf(pos[3]) < 1e-6f`), and separate **allocated capacity (`alloc_w`, `alloc_h`)** from **active draw extent (`active_w`, `active_h`)** per `GpuRT`. Pass `(active_w/alloc_w, active_h/alloc_h)` UV scale to `ps_blit`, crop BMP dumps via `CopySubresourceRegion`, and scale RT-as-SRV UVs by `(1/alloc_w, 1/alloc_h)` for linear RTs and `(t->w/alloc_w, t->h/alloc_h)` for normalized RTs.
 
 ### Sub-Clip Scissor Rectangles (`clip_x`, `clip_y`) — Minimaps & Split Viewports
 - Games draw circular minimaps, mirrors, and corner UI panels by setting NV2A surface clip offsets (`clip_x`, `clip_y`, `width`, `height`, e.g., `112×112+56+324`) while keeping the **same** base RT VA!
@@ -43,9 +43,12 @@ Choose based on your `default.xbe` symbol/LTCG analysis (never guess):
 ### Textures, Swizzling, Palettes, Cubemaps & Render-Target Hazards
 - **Morton Swizzling vs Linear vs DXT:** Most Xbox textures (except `D3DFMT_LIN_*` and `YUY2`/`UYVY`) are Morton Z-order swizzled; `DXT1`/`3`/`5` are block-linear.
 - **Palettized `P8` (`fmt 0x0B`):** Decode 256-entry CLUT (`Nv2aTexture.palette`) and hash palette memory alongside texels so palette animations stay live.
-- **6-Face Cubemaps:** Handle `cube` and `cube_face_stride` (`128`-byte NV2A face alignment), including syncing all 6 faces cleanly (`sync_cube_rt_faces`) when rendered dynamically to offscreen cubemap faces!
+- **6-Face Cubemaps (Dirty-Tracked):** Handle `cube` and `cube_face_stride` (`128`-byte NV2A face alignment). Dirty-track per-RT `write_seq` vs per-cubemap `cube_face_seq[6]` in `sync_cube_rt_faces` so faces only `CopySubresourceRegion` when re-rendered (`193 → 3` copies/frame), and verify identical format & dimensions before copying.
 - **Guest RAM Coherency (Bink Video / Dynamic Textures):** Titles decode `YUY2` video frames or dynamic textures in-place at the same RAM `offset`. Hash sample texels cleanly per flip (`checked_flip`) and re-upload on hash change.
-- **D3D11 RTV/SRV Hazard:** Before calling `OMSetRenderTargets`, explicitly bind `NULL` across PS SRV slots `0..7` (`PSSetShaderResources(0, 8, null_srvs)`) because games immediately bind previously drawn offscreen RTs (motion blur, bloom, mirrors) as input textures.
+- **Texture Cache Sizing, Hashing & SRV Lifetime Safety:** Use a **`512 × 8`** set-associative texture cache with **multiplicative Fibonacci hashing** (avoids 2048-byte aligned DXT5 set collisions), gate lookups by `rs->rc.stage_program` (`modes 1..3`), canonicalize unused `palette`/`pitch` key fields, replace `last_used_flip` LRU with a **monotonic `uint64_t use_seq`**, and pin staged `srvs[0..3]` with `AddRef()`/`Release()` across `PSSetShaderResources` to prevent same-draw driver crashes (`nvwgf2umx.dll`). Key DSVs by `(zeta_va, w, h)` (`MAX_DSVS = 32`).
+- **D3D11 RTV/SRV Hazard & Active RT Self-Sampling (Radial Motion Blur / Feedback):**
+  1. Explicitly bind `NULL` across PS SRV slots `0..7` before `OMSetRenderTargets`.
+  2. When a post-processing pass (radial motion blur, feedback trails) samples the **currently bound RT (`t->offset == cur_rt_va`)**, do **NOT** fall through to zeroed guest RAM (which causes a black vignette!). Instead maintain a lazy GPU snapshot (`copy_tex`/`copy_srv`, dirty-tracked via `write_seq`/`copy_seq`), run GPU-to-GPU `CopyResource(copy_tex, cur_rt->tex)` when dirty, and bind `copy_srv`.
 
 ## 3. Capture-Based Validation
 

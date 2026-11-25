@@ -15,11 +15,14 @@ import sys
 from pathlib import Path
 
 GITIGNORE_CONTENT = """# Original Xbox Porting - Keep game data and generated artifacts out of Git
+Game/
 private/
 assets/
 extracted/
 build/
 out/
+saves/
+tools/external/
 *.iso
 *.xiso
 *.xbe
@@ -31,6 +34,10 @@ out/
 *.wma
 *.pdb
 *.dmp
+*.exe
+*.bmp
+*.png
+*.log
 """
 
 DIRS = [

@@ -51,3 +51,26 @@ All utilities in `scripts/` use the **Python 3.10+ standard library only** (`py 
 py -3 scripts/scaffold_port.py my-port --title-id <HEX8> --name "<Title>"
 py -3 scripts/init_port_db.py my-port/reports/port.db --from-xbe-json reports/xbe-info.json
 ```
+
+## 6. `verify_port_release.py` — Standalone PE, TLS, Explorer & Integrity Auditor
+
+- **When to use:** Before marking Tier 0, Tier 1, or Tier 2 complete — verifies zero non-OS DLL imports (catching MinGW `libwinpthread-1.dll` leaks), PE `.tls` directory presence (`RECOMP_FAST_TLS`), zero `__emutls_get_address` `.obj` references, clean Windows Explorer launch from `C:\Windows\Temp` with stripped `PATH`, read-only disc manifest SHA-256 integrity, and repo hygiene.
+- **Command:**
+  ```powershell
+  py -3 scripts/verify_port_release.py build/recomp/game_port.exe `
+      --obj-dir build/recomp/CMakeFiles `
+      --test-explorer 12 `
+      --manifest reports/disc-manifest.json `
+      --extracted private/extracted/disc `
+      --repo .
+  ```
+
+## 7. `analyze_d3d11_prof.py` — `[D3D11-PROF]` Bottleneck Diagnostician
+
+- **When to use:** During Workflow 8 (Optimization) to turn raw `[D3D11-PROF]` runtime logs into per-tier FPS tables (`2D Menus`, `Light 3D / Showroom`, `Heavy 3D Gameplay`) and automatically flag texture cache hash collisions, excessive cubemap face syncs, active RT self-sampling passes, and guest/VSH CPU overhead.
+- **Command:**
+  ```powershell
+  py -3 scripts/analyze_d3d11_prof.py private/logs/opt_bench.log --markdown
+  ```
+
+See also [rea-and-advanced-tools.md](rea-and-advanced-tools.md) for `rea` MCP integration and Win32 GUI PowerShell test-runner patterns.

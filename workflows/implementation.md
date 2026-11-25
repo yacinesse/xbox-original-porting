@@ -9,9 +9,10 @@
 ## Steps
 
 1. **Executable Root & Host Startup Hygiene (`main.c`)**
-   - Use [recomp_main_template.c](../examples/recomp_main_template.c): locate `default.xbe` relative to `GetModuleFileNameA` and call `SetCurrentDirectoryA(...)` so launching from Windows Explorer always finds game files.
-   - Configure large buffered `stderr` (`setvbuf(..., _IOFBF, 65536)`) and `timeBeginPeriod(1)`.
-   - Install Vectored Exception Handler delegating strictly to `xbox_VehMmioFault(ep)` — **never** swallow game `DIV0` or SEH faults.
+   - Use [recomp_main_template.c](../examples/recomp_main_template.c): locate `default.xbe` & writable `saves\` relative to `GetModuleFileNameA` and call `SetCurrentDirectoryA(...)` so launching from Windows Explorer always finds game files.
+   - Link MinGW-w64 builds with **`-static -static-libgcc`** ([CMakeLists.port.example](../examples/CMakeLists.port.example)) so zero non-OS DLLs (`libwinpthread-1.dll`) are imported.
+   - Configure large buffered `stderr` (`setvbuf(..., _IOFBF, 65536)`), `timeBeginPeriod(1)`, and `RECOMP_VBLANK=1`.
+   - Install Vectored Exception Handler delegating strictly to `xbox_VehMmioFault(ep)` (with `SymFromAddr` + `CaptureStackBackTrace` logging on unexpected non-MMIO AVs) — **never** swallow game `DIV0` or SEH faults.
 2. **Memory, Kernel, OHCI & D3D8LTCG Fence Bring-Up**
    - Initialize `CreateFileMapping` mirror views (`xbox_MemoryLayoutInit()`), `D:`/`T:`/`U:`/`Z:` host paths, and USB OHCI (`xbox_OhciInit()`).
    - Configure safe defaults (unset env vars to turn off, never set `"0"` on presence flags):
@@ -22,11 +23,11 @@
    - If using `D3D8LTCG`, extract `D3D8LTCG__D3D_g_pDevice` via `XbSymbolDatabaseCLI` and wire `xbox_Nv2aMirrorFence(g_pDevice_va, 0x2Cu, 0x30u)` (verifying offsets for your XDK build).
 3. **Hardware Graphics Backend (`Nv2aBackend` / D3D11 or HLE)**
    - **Never ship the CPU software rasterizer** for playable gameplay (`~15 FPS` ceiling). Register a hardware **D3D11 `Nv2aBackend`** (`nv2a_backend_register`):
-     - Track GPU-resident offscreen RTs (`MAX_RTS`), preserving `alloc_w`/`alloc_h` (e.g., `640×960` supersampled AA targets) vs resolved `640×480` backbuffers.
+     - Track GPU-resident offscreen RTs (`MAX_RTS`), separating `alloc_w`/`alloc_h` (e.g., `640×960` supersampled AA targets) from `active_w`/`active_h` (`640×480`) for cropped `ps_blit`, BMP dumps, and RT-as-SRV UV scaling.
      - Scale transformed vertices by `aa_sx` / `aa_sy`.
      - Pass `control0` (`0x0290`) and select W-buffer depth output (`ps_main_wbuf` when `control0 & 0x10000u`).
      - Pass `Nv2aSurface.clip_x, clip_y` into `RSSetScissorRects` so sub-viewports (minimaps, split panels) render intact.
-     - Enable `RECOMP_STRIP_ALT_WINDING=1`, unbind SRV slots `0..7` before `OMSetRenderTargets`, support multi-stage register combiners (`textures[4]`, `palette` `0x0B`, 6-face aligned cubemaps), and hash guest texture memory to catch in-place updates (Bink `YUY2` video).
+     - Enable `RECOMP_STRIP_ALT_WINDING=1`, unbind SRV slots `0..7` before `OMSetRenderTargets`, support **active RT self-sampling via GPU `CopyResource` snapshots (`copy_tex`/`copy_srv`)** for radial blur/feedback effects, use a `512×8` Fibonacci-hashed texture cache with monotonic `use_seq` LRU + `AddRef`/`Release` SRV pinning, key DSVs by `(zeta_va, w, h)`, dirty-track dynamic 6-face cubemap syncs, and hash guest RAM for in-place `YUY2` Bink video updates.
 4. **Audio & Genre-Appropriate PC Controls**
    - Ensure MCPX APU (`xbox_apu` / `DSOUND`) handles AC97 readiness cleanly; patch any tight MMIO busy-waits (`0xFEC0010B`) or 10 ms DSP watchdog delays cleanly.
    - Wire both **XInput/SDL3 controller support** (mapping PC digital face buttons to `255` `0xFF` analog bytes!) and **intuitive genre-matched keyboard presets** (do NOT leave `RTRIGGER` on `'3'` for racing games — bind `W`/`Up` throttle, `S`/`Down` brake, `A`/`D` steering!).

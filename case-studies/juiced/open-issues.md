@@ -1,26 +1,23 @@
-# *Juiced* Case Study: Unresolved Issues & Incomplete Work
+# *Juiced* Case Study: Remaining Open Issues & Resolved History
 
-Per strict evidence rules, every item below is **[UNRESOLVED]** or **[EXPERIMENTAL / NOT YET IMPLEMENTED]** and must NOT be cited as fixed in *Juiced*.
+Per strict evidence rules, items in Section 1 are genuinely **[UNRESOLVED]** and must NOT be cited as complete in *Juiced*. Section 2 records previously open items that have since been **[VERIFIED]** solved.
 
-## 1. Visual Glitches ([UNRESOLVED])
-
-### Fullscreen Dark Vignette / Radial Motion Blur Fan
-- **Observed Symptom:** User reported a fullscreen vignette / dark edge artifact during driving.
-- **Diagnostic Trace Status:** Narrowed down via `[FTRACE-FAN]` and multi-RT BMP dumps to `NV_PRIM_TRIANGLE_FAN` (`prim=7`, trace line `15782`) sampling backbuffer surface `0x81230000` (`addr=(3,3)`, `filter=02042000`) plus a bloom surface pass around `0x81B24800` (`line 15757`), before work shifted to skill extraction.
-- **Root Cause:** Not yet confirmed. Suspected wrap/clamp border behavior, UV normalization near corners, or bloom/combiner alpha-blend factor mismatch when sampling a resolved `640×960` AA surface.
+## 1. Remaining Open / Untested Items ([UNRESOLVED])
 
 ### Unimplemented Minor Primitive Types
 - **Observed Status:** In `nv2a_pb_exec.c`'s `raster_batch_program`, `NV_PRIM_POINTS` (e.g., particles/sparks — observed ~36 calls in trace) and `NV_PRIM_LINE_STRIP` (e.g., wireframe/debug/effects — observed ~24 calls in trace) fall into `default: break;` and are skipped.
 - **Impact:** Minor particle or line effects are invisible until lowered into screen-space quads/triangles or native D3D11 point/line topologies.
 
-## 2. Input & Controller Support ([UNRESOLVED / WIP])
-
-- **Default Keyboard Binding Issue:** Under `xboxrecomp`'s stock `RECOMP_KEYBOARD=1` mapping, Left Stick Up defaults to `'W'` while **Right Trigger (`RTRIGGER` — Juiced's throttle)** defaults to **`'3'`**! Users expecting `WASD` driving controls had to press `'3'` to accelerate.
-- **Missing Multi-Slot XInput / Non-XInput Controller Work:** Intuitive racing keyboard presets (`W`/`Up` throttle, `S`/`Down` brake/reverse, `A`/`D` steering, mapped cleanly alongside XInput/DirectInput/HID pads) were designed as next steps, **not** implemented or runtime-tested yet.
-
-## 3. Gameplay & Platform Coverage Gaps ([UNRESOLVED])
-
-- **Menu Flow & FMVs:** Automated test runs verified boot, Bink intros, menu navigation, car select (`NEW DRIVER NAME`, `CHOOSE PHONE`), and live driving in San Ricardo / Engstrom District, **not** a complete manual interactive playthrough of all UI screens.
-- **Saves (`TDATA`/`UDATA`) & Career Mode:** Early crash on `SAVING...` (`CMSGlobal.sav`) via `sub_0001BE80` was fixed, but end-to-end save/reload persistence across full career progression remains untested.
+### Full-Game & Platform Coverage Boundaries
+- **Full Career Playthrough & Multi-Track Matrix:** Live verification covered boot, Bink intro FMVs, title screen, profile creation/reload (`Player`), crew logo, Arcade Novice Series, 3D Mitsubishi FTO showroom, and high-speed nitro/drift racing in San Ricardo & Engstrom District; a 100% manual playthrough across every career event, pink-slip race, and mod shop screen remains untested.
+- **Non-XInput Wheels / DirectInput Controllers:** XInput gamepads + custom racing keyboard (`juiced_controls.ini`) are verified; DirectInput/HID steering wheels and PlayStation/Switch pads would require an SDL3 `SDL_Gamepad` layer.
 - **Xbox Live (`XONLINE` / `XNET`):** No multiplayer or Xbox Live matchmaking flows have been tested.
-- **Clean-Up Needed in Working Fork:** Diagnostic logging flags (`[FTRACE*]`, `[BLOOM-*]`, per-RT dump instrumentation) remained in `JuicedPort`'s working tree during the vignette investigation.
+
+## 2. Previously Open Issues Now Solved ([VERIFIED])
+
+| Previously Open Issue | Verified Root Cause & Resolution |
+|---|---|
+| **Fullscreen Dark Vignette / Radial Motion Blur Fan** *(SOLVED)* | Juiced's radial motion blur fan (`prim=7`) self-samples the **currently active RT (`t->offset == cur_rt_va`)**, which previously skipped the GPU RT pool and read zeroed guest RAM (`0x00000000`), blending solid black around the viewport. Resolved via lazy GPU-to-GPU `CopyResource` RT snapshots (`copy_tex`/`copy_srv`, dirty-tracked by `write_seq`); visually verified clean outward-streaking radial blur at 105–119 MPH with nitro and drift. |
+| **Intuitive Racing Keyboard Controls + INI Remapping** *(SOLVED)* | Verified exact `DRIVER1` & `UI` Xbox mappings from `scripts.dat`, implemented `keyboard.c` + `input_map.c` mapping `W`/`S` → Right/Left Trigger, `A`/`D` → Left Stick X, `Space` → `A` (`0xFF`), `Left Shift` → `Y` (Nitrous), `Enter`/`Esc` → `Start`, `Alt+Enter`/`F11` fullscreen, `F12` screenshot, merged with XInput gamepads and `juiced_controls.ini` overrides. |
+| **`UDATA`/`TDATA` Profile Save Persistence** *(SOLVED)* | Created `Player` profile in-game -> persisted `saves/UDATA/545100ef/B36B6776DA41/{juicey.dat (51,049 B), SaveMeta.xbx, saveimage.xbx, signature (20 B)}` with 0 crashes in `sub_0001BE80`, and verified clean reload (`NTSTATUS 0x00000000`) across subsequent launches. |
+| **Hot-Path Diagnostic Log Cleanup** *(SOLVED)* | Gated `[READ]` behind `RECOMP_LOG_READ` and `[GPU] draw #` behind `RECOMP_PB_EXEC_VERBOSE`; zero-DLL standalone `-static -static-libgcc` executable verified cleanly from `C:\Windows\Temp` with stripped `PATH`. |

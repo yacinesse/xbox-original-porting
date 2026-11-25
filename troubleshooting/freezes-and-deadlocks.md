@@ -41,3 +41,8 @@ When a recompiled Xbox game hangs at `0.00 fps` without crashing, determine **wh
 - **Symptom:** Every frame stalls for ~10 ms while calling `KeStallExecutionProcessor` from a `DSOUND` GP DSP watchdog check.
 - **Cause:** Because emulated APU MMIO responds synchronously/instantly, `DSOUND` repeatedly enters its retry delay path.
 - **Verified Fix:** Identify `g_xbox_kernel_caller` at that call site and fast-return inside `xbox_KeStallExecutionProcessor` only for verified DSP watchdog polling callers.
+
+### Signature F: Intermittent Flip-0 Cold-Boot Hang on Title `KEVENT` Under `-O3`
+- **Symptom:** Port usually boots cleanly, but occasionally stalls at `0` flips waiting on a title-owned `KEVENT` (e.g., `0x002BBC8C`) right after startup when compiled with `-O3`.
+- **Cause:** Inside `ke_guest_event_prepare()` (`kernel_bridge.c`), a non-volatile `BRIDGE_MEM32` read checking guest `SignalState` after `ResetEvent(h)` can be reordered or hoisted by GCC `-O3`, missing a concurrent signal from another thread (VBlank/DPC/APU) before blocking in `WaitForSingleObject`.
+- **Verified Fix:** Read guest `SignalState` through a `volatile uint32_t *` with an explicit **`MemoryBarrier()`** between `ResetEvent(h)` and the re-check of guest `SignalState`, and default `RECOMP_VBLANK=1` at startup.

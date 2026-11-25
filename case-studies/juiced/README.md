@@ -28,5 +28,5 @@
 
 - [executable-and-assets.md](executable-and-assets.md) — XGD1 layout, XBE sections, `XbSymbolDatabase` symbol recovery, `.dat` chunked-zlib & `.xbx` forensics.
 - [bringup-and-fixes.md](bringup-and-fixes.md) — From boot crashes and `0.00 fps` stalls (`D3D8LTCG` fence mirror, `RECOMP_PB_WALK`, `sub_00280CC7`, mid-instruction splits, CWD bug) to playable rendering.
-- [graphics-and-optimization.md](graphics-and-optimization.md) — Hardware D3D11 NV2A backend, AA supersampling (`640x960`), W-buffer shader, sub-clip minimap scissor fix, and the **17 FPS → 98–128 FPS** optimization campaign (`RECOMP_FAST_TLS`, Win64 SSE2 VSH JIT + `16,777,216` parity checks).
-- [open-issues.md](open-issues.md) — Explicitly tracked unresolved glitches, unimplemented primitives (`POINTS` / `LINE_STRIP`), racing keyboard bindings (`'3'` throttle vs `'W'`), and multi-slot controller work.
+- [graphics-and-optimization.md](graphics-and-optimization.md) — Hardware D3D11 NV2A backend, AA `640×960` active extent, W-buffer shader, sub-clip minimap scissor fix, `nvwgf2umx.dll` SRV pinning fix, **solved radial motion blur RT self-sampling snapshot (`copy_tex`)**, Fibonacci texture hashing (`miss=0`), and Win64 SSE2 VSH JIT (`67.1M` identical parity checks) + `RECOMP_FAST_TLS=1` (**21–34 → 70–78 FPS** race, up to 98–128 FPS with bulk PB).
+- [open-issues.md](open-issues.md) — Remaining open items (`POINTS`/`LINE_STRIP`, full career playthrough, Xbox Live) plus solved history (radial blur vignette, racing keyboard/`juiced_controls.ini`, `UDATA` save create+reload).

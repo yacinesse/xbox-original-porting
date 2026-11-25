@@ -1,8 +1,9 @@
 # CMakeLists.port.example
 #
-# Generic CMake build template for a standalone Original Xbox static recompilation
-# port linking against xboxrecomp + native Windows Direct3D 11 graphics backend.
-# Keep your port repo separate from the external `xboxrecomp` checkout.
+# Production-ready CMake build template for a standalone Original Xbox static
+# recompilation port linking against xboxrecomp + native Windows Direct3D 11
+# graphics backend. Keep your port repo separate from the external `xboxrecomp`
+# checkout.
 
 cmake_minimum_required(VERSION 3.20)
 project(xbox_game_port C)
@@ -11,6 +12,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+
+# Enable Win64 TEB-slot TLS (`gs:[0x1480 + slot * 8]`) on MinGW GCC/Clang to
+# eliminate `__emutls_get_address` calls on every lifted register access.
+# Pair with `examples/recomp_fast_tls.h` and verify via `scripts/verify_port_release.py`.
+option(PORT_ENABLE_FAST_TLS "Use Win64 PE TLS TEB-slot registers on MinGW/Clang" ON)
+if(PORT_ENABLE_FAST_TLS AND NOT MSVC)
+    add_compile_definitions(RECOMP_FAST_TLS=1)
+endif()
 
 # Point to your pinned external/xboxrecomp directory
 set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../external/xboxrecomp"
@@ -41,10 +50,14 @@ if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W2 /O2 /GS- /bigobj)
     target_link_options(${PROJECT_NAME} PRIVATE /LARGEADDRESSAWARE /STACK:8388608)
 else()
-    # MinGW-w64 / GCC / Clang: -O3 -fno-math-errno accelerates lifted math & VSH paths.
-    # Combine with Ninja (`-G Ninja`) for fast incremental parallel builds.
+    # MinGW-w64 / GCC / Clang:
+    # - `-O3 -fno-math-errno` accelerates lifted math, pushbuffer & VSH paths.
+    # - `-static -static-libgcc` eliminates ALL non-OS runtime DLLs (including
+    #   `libwinpthread-1.dll`, which STILL gets pulled in if you only pass
+    #   `-Wl,-Bstatic -lwinpthread`!). Verify 0 non-OS DLLs with
+    #   `scripts/verify_port_release.py`.
     target_compile_options(${PROJECT_NAME} PRIVATE -O3 -fno-math-errno -Wno-unused-variable -Wno-unused-label)
-    target_link_options(${PROJECT_NAME} PRIVATE -Wl,--stack,8388608)
+    target_link_options(${PROJECT_NAME} PRIVATE -static -static-libgcc -Wl,--stack,8388608)
 endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -56,5 +69,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     $<IF:$<BOOL:${MINGW}>,xinput1_4,xinput>
     winmm
     dbghelp
+    ole32
     ws2_32
 )

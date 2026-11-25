@@ -33,3 +33,9 @@
 | `MICROSOFT*XBOX*MEDIA` not found | Redump full XGD1/XGD2/XGD3 image or `.cci`/`.cso` compressed image | Use `scripts/xiso_inspect.py` (auto-probes `0x0`, `0x18300000`, `0x0FD90000`, `0x02080000`); decompress `.cci`/`.cso` first with `Repackinator` |
 | `Build Type: UNKNOWN` | Non-standard image base or Chihiro/Debug XOR key | Verify against Retail (`0xA8FC57AB`), Debug (`0x94859D4B`), and Chihiro (`0x40B5C16E`) keys in `xbe_inspect.py` |
 | `SHA1=FAIL` or `SHA1=ZERO` | `ZERO` = normal for `nxdk`/`cxbe` homebrew; `FAIL` = patched retail `.xbe` | Re-extract an unmodified retail `default.xbe` before lifting |
+
+## 6. Windows Explorer Launch Fails: `"libwinpthread-1.dll was not found"` (MinGW-w64)
+
+- **Symptom:** Binary runs cleanly in a developer shell (where WinLibs MinGW `bin/` is on `PATH`), but double-clicking it in Windows Explorer pops up a Windows System Error for `libwinpthread-1.dll`, `libgcc_s_seh-1.dll`, or `libstdc++-6.dll`.
+- **Root Cause:** Passing `-Wl,-Bstatic -lwinpthread` in CMake `target_link_options` is NOT sufficient—GCC appends implicit runtime link libraries afterward, still linking `libwinpthread-1.dll` dynamically.
+- **Verified Fix:** Pass **`-static -static-libgcc`** in `target_link_options` (see [CMakeLists.port.example](../examples/CMakeLists.port.example)), then run `py -3 scripts/verify_port_release.py <exe> --test-explorer 12` to confirm **0 non-OS DLL imports** and a clean launch from `C:\Windows\Temp` with `PATH` stripped to `System32`/`Windows`.
